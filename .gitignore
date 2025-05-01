@@ -1,0 +1,25 @@
+# Binaries
+bin/
+*.exe
+*.dll
+*.so
+*.dylib
+*.test
+*.out
+
+# Vendor directory (if not using Go modules)
+vendor/
+
+# OS-specific
+.DS_Store
+Thumbs.db
+
+# Logs and coverage
+*.log
+coverage.out
+
+# IDEs and editors
+.idea/
+
+# Environment files
+.env*
