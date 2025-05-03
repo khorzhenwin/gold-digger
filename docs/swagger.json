@@ -1,0 +1,232 @@
+{
+    "swagger": "2.0",
+    "info": {
+        "contact": {}
+    },
+    "paths": {
+        "/api/v1/health": {
+            "get": {
+                "description": "Returns service health",
+                "tags": [
+                    "health"
+                ],
+                "summary": "Get health status",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/ticker-price/{ticker}": {
+            "get": {
+                "description": "Returns the current price of a ticker",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "ticker-price"
+                ],
+                "summary": "Get price of a ticker",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Ticker Symbol",
+                        "name": "ticker",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/ticker_price.TickerPrice"
+                        }
+                    },
+                    "400": {
+                        "description": "Invalid ticker symbol",
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/watchlist": {
+            "get": {
+                "description": "Returns the current watchlist",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "watchlist"
+                ],
+                "summary": "Get all watchlist items",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "array",
+                            "items": {
+                                "$ref": "#/definitions/watchlist.Ticker"
+                            }
+                        }
+                    }
+                }
+            },
+            "post": {
+                "description": "Adds a new stock to the watchlist",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "watchlist"
+                ],
+                "summary": "Create a watchlist entry",
+                "parameters": [
+                    {
+                        "description": "Ticker to add",
+                        "name": "ticker",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/watchlist.Ticker"
+                        }
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "description": "created",
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/watchlist/{id}": {
+            "put": {
+                "description": "Update the symbol or notes for a given watchlist item",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "watchlist"
+                ],
+                "summary": "Update a watchlist entry",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Ticker ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Updated ticker",
+                        "name": "ticker",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/watchlist.Ticker"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "updated",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    "400": {
+                        "description": "bad request",
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                }
+            },
+            "delete": {
+                "description": "Remove a ticker from your watchlist by ID",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "watchlist"
+                ],
+                "summary": "Delete a watchlist entry",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Ticker ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "204": {
+                        "description": "no content",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    "400": {
+                        "description": "bad request",
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                }
+            }
+        }
+    },
+    "definitions": {
+        "ticker_price.TickerPrice": {
+            "type": "object",
+            "properties": {
+                "price": {
+                    "type": "string"
+                },
+                "symbol": {
+                    "type": "string"
+                },
+                "timestamp": {
+                    "type": "string"
+                }
+            }
+        },
+        "watchlist.Ticker": {
+            "type": "object",
+            "properties": {
+                "created_at": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "integer"
+                },
+                "notes": {
+                    "type": "string"
+                },
+                "symbol": {
+                    "description": "e.g., AAPL",
+                    "type": "string"
+                },
+                "updated_at": {
+                    "type": "string"
+                }
+            }
+        }
+    }
+}

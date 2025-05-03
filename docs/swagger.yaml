@@ -1,0 +1,151 @@
+definitions:
+  ticker_price.TickerPrice:
+    properties:
+      price:
+        type: string
+      symbol:
+        type: string
+      timestamp:
+        type: string
+    type: object
+  watchlist.Ticker:
+    properties:
+      created_at:
+        type: string
+      id:
+        type: integer
+      notes:
+        type: string
+      symbol:
+        description: e.g., AAPL
+        type: string
+      updated_at:
+        type: string
+    type: object
+info:
+  contact: {}
+paths:
+  /api/v1/health:
+    get:
+      description: Returns service health
+      responses:
+        "200":
+          description: OK
+          schema:
+            type: string
+      summary: Get health status
+      tags:
+      - health
+  /api/v1/ticker-price/{ticker}:
+    get:
+      description: Returns the current price of a ticker
+      parameters:
+      - description: Ticker Symbol
+        in: path
+        name: ticker
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/ticker_price.TickerPrice'
+        "400":
+          description: Invalid ticker symbol
+          schema:
+            type: string
+      summary: Get price of a ticker
+      tags:
+      - ticker-price
+  /api/v1/watchlist:
+    get:
+      description: Returns the current watchlist
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/watchlist.Ticker'
+            type: array
+      summary: Get all watchlist items
+      tags:
+      - watchlist
+    post:
+      consumes:
+      - application/json
+      description: Adds a new stock to the watchlist
+      parameters:
+      - description: Ticker to add
+        in: body
+        name: ticker
+        required: true
+        schema:
+          $ref: '#/definitions/watchlist.Ticker'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: created
+          schema:
+            type: string
+      summary: Create a watchlist entry
+      tags:
+      - watchlist
+  /api/v1/watchlist/{id}:
+    delete:
+      description: Remove a ticker from your watchlist by ID
+      parameters:
+      - description: Ticker ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "204":
+          description: no content
+          schema:
+            type: string
+        "400":
+          description: bad request
+          schema:
+            type: string
+      summary: Delete a watchlist entry
+      tags:
+      - watchlist
+    put:
+      consumes:
+      - application/json
+      description: Update the symbol or notes for a given watchlist item
+      parameters:
+      - description: Ticker ID
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Updated ticker
+        in: body
+        name: ticker
+        required: true
+        schema:
+          $ref: '#/definitions/watchlist.Ticker'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: updated
+          schema:
+            type: string
+        "400":
+          description: bad request
+          schema:
+            type: string
+      summary: Update a watchlist entry
+      tags:
+      - watchlist
+swagger: "2.0"

@@ -1,0 +1,39 @@
+version: '3.9'
+
+services:
+  swagger:
+    image: golang:1.21
+    working_dir: /app
+    volumes:
+      - .:/app
+    entrypoint: [ "sh", "-c" ]
+    command: |
+      go install github.com/swaggo/swag/cmd/swag@latest && \
+      swag init -g cmd/api/api.go --output docs
+
+  app:
+    working_dir: /app
+    build:
+      context: .
+      dockerfile: Dockerfile
+    environment:
+      - DB_HOST=${DB_HOST}
+      - DB_PORT=${DB_PORT}
+      - DB_USER=${DB_USER}
+      - DB_PASSWORD=${DB_PASSWORD}
+      - DB_NAME=${DB_NAME}
+      - DB_SSL=${DB_SSL}
+      - FORCE_POLL=${FORCE_POLL}
+      - ALPHA_VANTAGE_API_KEY=${ALPHA_VANTAGE_API_KEY}
+      - ALPHA_VANTAGE_BASE_URL=${ALPHA_VANTAGE_BASE_URL}
+      - KAFKA_USERNAME=${KAFKA_USERNAME}
+      - KAFKA_PASSWORD=${KAFKA_PASSWORD}
+      - KAFKA_TICKER_PRICE_TOPIC=${KAFKA_TICKER_PRICE_TOPIC}
+      - KAFKA_BROKER=${KAFKA_BROKER}
+      - KAFKA_CLIENT_ID=${KAFKA_CLIENT_ID}
+      - KAFKA_CLIENT_SECRET=${KAFKA_CLIENT_SECRET}
+      - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN}
+      - TELEGRAM_CHAT_ID=${TELEGRAM_CHAT_ID}
+    command: [ "./gochujang" ]
+    ports:
+      - "8080:8080"

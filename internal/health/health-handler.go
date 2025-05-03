@@ -3,7 +3,6 @@ package health
 import (
 	"encoding/json"
 	"github.com/go-chi/chi/v5"
-	"github.com/khorzhenwin/gold-digger/internal/models"
 	"net/http"
 )
 
@@ -21,7 +20,7 @@ func RegisterRoutes(r chi.Router) {
 // @Router       /api/v1/health [get]
 func GetHandler(responseWriter http.ResponseWriter, request *http.Request) {
 	// Create a response object
-	response := models.HealthResponse{
+	response := HealthResponse{
 		Status:  "OK",
 		Message: "The server is up",
 	}
