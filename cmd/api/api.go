@@ -7,7 +7,6 @@ import (
 	applicationConfig "github.com/khorzhenwin/gold-digger/internal/config"
 	"github.com/khorzhenwin/gold-digger/internal/db"
 	"github.com/khorzhenwin/gold-digger/internal/health"
-	"github.com/khorzhenwin/gold-digger/internal/kafka"
 	"github.com/khorzhenwin/gold-digger/internal/models"
 	"github.com/khorzhenwin/gold-digger/internal/notification"
 	"github.com/khorzhenwin/gold-digger/internal/ticker-price"
@@ -32,11 +31,6 @@ func (app *application) run() error {
 		log.Fatal(vErr)
 	}
 
-	kafkaCfg, kErr := applicationConfig.LoadKafkaConfig()
-	if kErr != nil {
-		log.Fatal(kErr)
-	}
-
 	notifierCfg, nErr := applicationConfig.LoadNotifierConfig()
 	if nErr != nil {
 		log.Fatal(nErr)
@@ -56,16 +50,13 @@ func (app *application) run() error {
 	watchlistRepo := watchlist.NewRepository(conn)
 	watchlistService := watchlist.NewService(watchlistRepo)
 	notificationService := notification.NewService(notifierCfg)
-	tickerPriceService := ticker_price.NewService(watchlistService, vantageCfg, kafkaCfg)
+	tickerPriceService := ticker_price.NewService(watchlistService, vantageCfg)
 
-	// 3.1 Initialize Kafka Producer & Start Producer
-	kafka.InitKafkaProducer(kafkaCfg)
-	defer kafka.CloseKafkaProducer()
-	go ticker_price.PollAndPushToKafka(tickerPriceService, watchlistService, kafkaCfg)
+	// 3.1 Initialize Poller
+	go ticker_price.PollAndPersist(tickerPriceService, watchlistService)
 
-	// 3.2 Initialize Kafka Consumer & Start Consumer
+	// 3.2 Initialize Worker
 	tickerChan := make(chan models.TickerPrice, 100)
-	go kafka.StartKafkaConsumer(kafkaCfg, "gochujang-signals-group", tickerChan)
 	go ticker_price.StartSignalWorker(tickerChan, notificationService)
 
 	// 4. Setup Router config

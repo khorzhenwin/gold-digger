@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"github.com/khorzhenwin/gold-digger/internal/config"
-	"github.com/khorzhenwin/gold-digger/internal/kafka"
 	"github.com/khorzhenwin/gold-digger/internal/models"
 	"github.com/khorzhenwin/gold-digger/internal/notification"
 	"github.com/khorzhenwin/gold-digger/internal/watchlist"
@@ -20,11 +19,10 @@ import (
 type Service struct {
 	watchlistService watchlist.Service
 	vantageConfig    config.VantageConfig
-	kafkaConfig      config.KafkaConfig
 }
 
-func NewService(watchlistService *watchlist.Service, vantageConfig *config.VantageConfig, kafkaConfig *config.KafkaConfig) *Service {
-	return &Service{watchlistService: *watchlistService, vantageConfig: *vantageConfig, kafkaConfig: *kafkaConfig}
+func NewService(watchlistService *watchlist.Service, vantageConfig *config.VantageConfig) *Service {
+	return &Service{watchlistService: *watchlistService, vantageConfig: *vantageConfig}
 }
 
 func (s *Service) FindBySymbol(symbol string) *models.TickerPrice {
@@ -118,7 +116,7 @@ func pollPrices(tickerService *Service, symbols []string, results chan<- models.
 	}
 }
 
-func PollAndPushToKafka(tickerService *Service, watchlistService *watchlist.Service, kafkaConfig *config.KafkaConfig) {
+func PollAndPersist(tickerService *Service, watchlistService *watchlist.Service) {
 	// poll every 5 minutes
 	ticker := time.NewTicker(5 * time.Minute)
 	defer ticker.Stop()
@@ -136,8 +134,7 @@ func PollAndPushToKafka(tickerService *Service, watchlistService *watchlist.Serv
 		case res := <-results:
 			bytes, _ := json.Marshal(res)
 			log.Printf("✅ Price: %s", bytes)
-
-			go kafka.PushToKafkaTopic(kafkaConfig.TickerPriceTopic, res, res.Symbol)
+			// save to TSDB
 
 		case <-ticker.C:
 			if IsTradingHours(time.Now()) || os.Getenv("FORCE_POLL") == "true" {
