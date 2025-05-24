@@ -1,7 +1,10 @@
 package models
 
+import "time"
+
 type TickerPrice struct {
-	Symbol    string `json:"symbol"`
-	Price     string `json:"price"`
-	Timestamp string `json:"timestamp"`
+	ID        uint   `gorm:"primaryKey"`
+	Symbol    string `gorm:"index"`
+	Price     float64
+	Timestamp time.Time `gorm:"index"`
 }

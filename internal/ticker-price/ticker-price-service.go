@@ -17,12 +17,13 @@ import (
 )
 
 type Service struct {
-	watchlistService watchlist.Service
-	vantageConfig    config.VantageConfig
+	watchlistService      watchlist.Service
+	vantageConfig         config.VantageConfig
+	tickerPriceRepository *Repository
 }
 
-func NewService(watchlistService *watchlist.Service, vantageConfig *config.VantageConfig) *Service {
-	return &Service{watchlistService: *watchlistService, vantageConfig: *vantageConfig}
+func NewService(watchlistService *watchlist.Service, vantageConfig *config.VantageConfig, tickerPriceRepository *Repository) *Service {
+	return &Service{watchlistService: *watchlistService, vantageConfig: *vantageConfig, tickerPriceRepository: tickerPriceRepository}
 }
 
 func (s *Service) FindBySymbol(symbol string) *models.TickerPrice {
@@ -31,8 +32,8 @@ func (s *Service) FindBySymbol(symbol string) *models.TickerPrice {
 	return tickerPrice
 }
 
-func getTickersFromWatchlist(watchlistService *watchlist.Service) ([]string, error) {
-	tickers, err := watchlistService.FindAll()
+func (s *Service) getTickersFromWatchlist() ([]string, error) {
+	tickers, err := s.watchlistService.FindAll()
 	if err != nil {
 		return nil, err
 	}
@@ -93,11 +94,18 @@ func fetchPrice(externalApiUrl string, symbol string) (*models.TickerPrice, erro
 	if price == "" || timestamp == "" {
 		return nil, fmt.Errorf("empty price or timestamp, skipping symbol %s", symbol)
 	}
+	priceFloat, err := strconv.ParseFloat(price, 64)
+	parsedTimestamp, err := time.Parse("2006-01-02", timestamp)
+
+	if err != nil {
+		log.Printf("❌ Failed to parse price or timestamp for %s: %v", symbol, err)
+		return nil, fmt.Errorf("failed to parse price or timestamp: %w", err)
+	}
 
 	return &models.TickerPrice{
 		Symbol:    symbol,
-		Price:     price,
-		Timestamp: timestamp + "T00:00:00Z", // Add time if needed
+		Price:     priceFloat,
+		Timestamp: parsedTimestamp,
 	}, nil
 }
 
@@ -116,7 +124,7 @@ func pollPrices(tickerService *Service, symbols []string, results chan<- models.
 	}
 }
 
-func PollAndPersist(tickerService *Service, watchlistService *watchlist.Service) {
+func (s *Service) PollAndPersist() {
 	// poll every 5 minutes
 	ticker := time.NewTicker(5 * time.Minute)
 	defer ticker.Stop()
@@ -126,20 +134,30 @@ func PollAndPersist(tickerService *Service, watchlistService *watchlist.Service)
 	log.Println("📈 Ticker-price fetcher started")
 
 	// Start first run immediately
-	tickerList, _ := getTickersFromWatchlist(watchlistService)
-	go pollPrices(tickerService, tickerList, results)
+	tickerList, _ := s.getTickersFromWatchlist()
+	go pollPrices(s, tickerList, results)
 
 	for {
 		select {
 		case res := <-results:
 			bytes, _ := json.Marshal(res)
 			log.Printf("✅ Price: %s", bytes)
+
 			// save to TSDB
+			err := s.tickerPriceRepository.Save(models.TickerPrice{
+				Symbol:    res.Symbol,
+				Price:     res.Price,
+				Timestamp: res.Timestamp,
+			})
+
+			if err != nil {
+				return
+			}
 
 		case <-ticker.C:
 			if IsTradingHours(time.Now()) || os.Getenv("FORCE_POLL") == "true" {
 				log.Println("🔄 Polling watchlist...")
-				go pollPrices(tickerService, tickerList, results)
+				go pollPrices(s, tickerList, results)
 			}
 		}
 	}
@@ -152,9 +170,51 @@ func StartSignalWorker(input <-chan models.TickerPrice, notificationService *not
 		Price     float64
 	}
 
-	priceWindows := make(map[string][]PriceEntry)
-	lastSignal := make(map[string]time.Time)
-	var mu sync.Mutex
+	var (
+		priceWindows = make(map[string][]PriceEntry)
+		lastSignal   = make(map[string]time.Time)
+		mu           sync.Mutex
+	)
+
+	evaluateSignal := func(symbol string, window []PriceEntry) {
+		now := time.Now()
+		if len(window) < 5 {
+			return
+		}
+
+		oldest := window[0]
+		latest := window[len(window)-1]
+		totalChange := (latest.Price - oldest.Price) / oldest.Price
+
+		increaseCount, decreaseCount := 0, 0
+		for i := 1; i < len(window); i++ {
+			if window[i].Price > window[i-1].Price {
+				increaseCount++
+			} else if window[i].Price < window[i-1].Price {
+				decreaseCount++
+			}
+		}
+
+		if last, ok := lastSignal[symbol]; ok && now.Sub(last) < time.Hour {
+			return
+		}
+
+		var message string
+		if totalChange >= 0.02 && increaseCount >= 4 {
+			message = fmt.Sprintf("🚀 BUY SIGNAL for %s - Strong uptrend (%.2f%% increase)", symbol, totalChange*100)
+		} else if totalChange <= -0.02 && decreaseCount >= 4 {
+			message = fmt.Sprintf("🔻 BOGDANOFF HAS DOUMP IT. BUY THE DIP for %s - Strong downtrend (%.2f%% decrease)", symbol, totalChange*100)
+		} else {
+			return
+		}
+
+		log.Println(message)
+		if err := notificationService.Send(message); err != nil {
+			log.Printf("⚠️ Failed to send notification: %v", err)
+			return
+		}
+		lastSignal[symbol] = now
+	}
 
 	go func() {
 		ticker := time.NewTicker(15 * time.Minute)
@@ -163,22 +223,10 @@ func StartSignalWorker(input <-chan models.TickerPrice, notificationService *not
 		for {
 			select {
 			case msg := <-input:
-				parsedTime, err := time.Parse(time.RFC3339, msg.Timestamp)
-				if err != nil {
-					log.Printf("⚠️ Invalid timestamp: %v", msg.Timestamp)
-					continue
-				}
-				price, err := strconv.ParseFloat(msg.Price, 64)
-				if err != nil {
-					log.Printf("⚠️ Invalid price: %v", msg.Price)
-					continue
-				}
-				entry := PriceEntry{Timestamp: parsedTime, Price: price}
+				entry := PriceEntry{Timestamp: msg.Timestamp, Price: msg.Price}
 
 				mu.Lock()
 				priceWindows[msg.Symbol] = append(priceWindows[msg.Symbol], entry)
-
-				// Keep only the latest 10 observations
 				if len(priceWindows[msg.Symbol]) > 10 {
 					priceWindows[msg.Symbol] = priceWindows[msg.Symbol][len(priceWindows[msg.Symbol])-10:]
 				}
@@ -186,61 +234,8 @@ func StartSignalWorker(input <-chan models.TickerPrice, notificationService *not
 
 			case <-ticker.C:
 				mu.Lock()
-				now := time.Now()
-
 				for symbol, window := range priceWindows {
-					if len(window) < 5 {
-						continue
-					}
-
-					oldest := window[0]
-					latest := window[len(window)-1]
-
-					// % total movement
-					totalChange := (latest.Price - oldest.Price) / oldest.Price
-
-					// Count rises and falls
-					increaseCount := 0
-					decreaseCount := 0
-					for i := 1; i < len(window); i++ {
-						if window[i].Price > window[i-1].Price {
-							increaseCount++
-						} else if window[i].Price < window[i-1].Price {
-							decreaseCount++
-						}
-					}
-
-					// Cooldown: skip if recently signaled
-					if last, ok := lastSignal[symbol]; ok && now.Sub(last) < time.Hour {
-						continue
-					}
-
-					// 🚀 Uptrend Buy Signal
-					if totalChange >= 0.02 && increaseCount >= 4 {
-						message := fmt.Sprintf("🚀 BUY SIGNAL for %s - Strong uptrend (%.2f%% increase)", symbol, totalChange*100)
-						log.Printf(message)
-						err := notificationService.Send(message)
-
-						if err != nil {
-							return
-						}
-						lastSignal[symbol] = now
-						continue
-					}
-
-					// 🔻 Downtrend Buy-the-Dip Signal
-					if totalChange <= -0.02 && decreaseCount >= 4 {
-						message := fmt.Sprintf("🔻 BOGDANOFF HAS DOUMP IT. BUY THE DIP for %s - Strong downtrend (%.2f%% decrease)", symbol, totalChange*100)
-						log.Printf(message)
-						err := notificationService.Send(message)
-
-						if err != nil {
-							return
-						}
-
-						lastSignal[symbol] = now
-						continue
-					}
+					evaluateSignal(symbol, window)
 				}
 				mu.Unlock()
 			}

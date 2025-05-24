@@ -46,14 +46,20 @@ func (app *application) run() error {
 	if err := conn.AutoMigrate(&models.Ticker{}); err != nil {
 		log.Fatalf("❌ AutoMigrate failed: %v", err)
 	}
+	if err := conn.AutoMigrate(&models.TickerPrice{}); err != nil {
+		log.Fatalf("❌ AutoMigrate for TickerPrice failed: %v", err)
+	}
+	// Convert to hypertable
+	conn.Exec("SELECT create_hypertable('ticker_prices', 'timestamp', if_not_exists => TRUE);")
 
 	watchlistRepo := watchlist.NewRepository(conn)
 	watchlistService := watchlist.NewService(watchlistRepo)
 	notificationService := notification.NewService(notifierCfg)
-	tickerPriceService := ticker_price.NewService(watchlistService, vantageCfg)
+	tickerPriceRepository := ticker_price.NewRepository(conn)
+	tickerPriceService := ticker_price.NewService(watchlistService, vantageCfg, tickerPriceRepository)
 
 	// 3.1 Initialize Poller
-	go ticker_price.PollAndPersist(tickerPriceService, watchlistService)
+	go tickerPriceService.PollAndPersist()
 
 	// 3.2 Initialize Worker
 	tickerChan := make(chan models.TickerPrice, 100)

@@ -2,7 +2,7 @@ version: '3.9'
 
 services:
   swagger:
-    image: golang:1.21
+    image: golang:1.24-bullseye
     working_dir: /app
     volumes:
       - .:/app
@@ -17,6 +17,12 @@ services:
       context: .
       dockerfile: Dockerfile
     environment:
+      - LOCAL_DB_HOST=timescaledb
+      - LOCAL_DB_PORT=5432
+      - LOCAL_DB_USER=${LOCAL_DB_USER}
+      - LOCAL_DB_PASSWORD=${LOCAL_DB_PASSWORD}
+      - LOCAL_DB_NAME=${LOCAL_DB_NAME}
+      - LOCAL_DB_SSL=${LOCAL_DB_SSL}
       - DB_HOST=${DB_HOST}
       - DB_PORT=${DB_PORT}
       - DB_USER=${DB_USER}
@@ -28,6 +34,24 @@ services:
       - ALPHA_VANTAGE_BASE_URL=${ALPHA_VANTAGE_BASE_URL}
       - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN}
       - TELEGRAM_CHAT_ID=${TELEGRAM_CHAT_ID}
-    command: [ "./gochujang" ]
+    command: [ "./gold-digger" ]
     ports:
       - "8080:8080"
+    depends_on:
+      - timescaledb
+    links:
+      - timescaledb
+
+  timescaledb:
+    image: timescale/timescaledb:2.13.0-pg14
+    container_name:
+      gold-digger-timescaledb
+    ports:
+      - "5432:5432"
+    environment:
+      - POSTGRES_PASSWORD=${LOCAL_DB_PASSWORD} # Use the new variable
+    volumes:
+      - timescaledb_data:/var/lib/postgresql/data
+
+volumes:
+  timescaledb_data:
