@@ -30,7 +30,7 @@ func NewService(watchlistService *watchlist.Service, vantageConfig *config.Vanta
 
 func (s *Service) FindBySymbol(symbol string) *models.TickerPrice {
 	apiKey := s.vantageConfig.ApiKey
-	if s.selectedApiKeyIndex != nil && *s.selectedApiKeyIndex > 0 {
+	if s.selectedApiKeyIndex != nil && *s.selectedApiKeyIndex > 0 && *s.selectedApiKeyIndex-1 < len(s.vantageConfig.ApiKeyBackups) {
 		apiKey = s.vantageConfig.ApiKeyBackups[*s.selectedApiKeyIndex-1]
 	}
 
@@ -120,7 +120,7 @@ func pollPrices(tickerService *Service, symbols []string, results chan<- models.
 	for _, symbol := range symbols {
 		go func(s string) {
 			apiKey := tickerService.vantageConfig.ApiKey
-			if tickerService.selectedApiKeyIndex != nil && *tickerService.selectedApiKeyIndex > 0 {
+			if tickerService.selectedApiKeyIndex != nil && *tickerService.selectedApiKeyIndex > 0 && *tickerService.selectedApiKeyIndex-1 < len(tickerService.vantageConfig.ApiKeyBackups) {
 				apiKey = tickerService.vantageConfig.ApiKeyBackups[*tickerService.selectedApiKeyIndex-1]
 			}
 
@@ -139,7 +139,14 @@ func pollPrices(tickerService *Service, symbols []string, results chan<- models.
 					}
 					return
 				}
+				return
 			}
+
+			if resp == nil {
+				log.Printf("⚠️ Skipping %s due to nil response", s)
+				return
+			}
+
 			results <- *resp
 		}(symbol)
 	}
