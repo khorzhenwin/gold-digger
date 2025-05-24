@@ -11,6 +11,16 @@ services:
       go install github.com/swaggo/swag/cmd/swag@latest && \
       swag init -g cmd/api/api.go --output docs
 
+  timescaledb:
+    image: timescale/timescaledb:2.13.0-pg14
+    container_name: gold-digger-timescaledb
+    ports:
+      - "5432:5432"
+    environment:
+      - POSTGRES_PASSWORD=${LOCAL_DB_PASSWORD} # Use the new variable
+    volumes:
+      - timescaledb_data:/var/lib/postgresql/data
+
   app:
     working_dir: /app
     build:
@@ -31,6 +41,8 @@ services:
       - DB_SSL=${DB_SSL}
       - FORCE_POLL=${FORCE_POLL}
       - ALPHA_VANTAGE_API_KEY=${ALPHA_VANTAGE_API_KEY}
+      - ALPHA_VANTAGE_API_KEY_1=${ALPHA_VANTAGE_API_KEY_1}
+      - ALPHA_VANTAGE_API_KEY_2=${ALPHA_VANTAGE_API_KEY_2}
       - ALPHA_VANTAGE_BASE_URL=${ALPHA_VANTAGE_BASE_URL}
       - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN}
       - TELEGRAM_CHAT_ID=${TELEGRAM_CHAT_ID}
@@ -41,17 +53,6 @@ services:
       - timescaledb
     links:
       - timescaledb
-
-  timescaledb:
-    image: timescale/timescaledb:2.13.0-pg14
-    container_name:
-      gold-digger-timescaledb
-    ports:
-      - "5432:5432"
-    environment:
-      - POSTGRES_PASSWORD=${LOCAL_DB_PASSWORD} # Use the new variable
-    volumes:
-      - timescaledb_data:/var/lib/postgresql/data
 
 volumes:
   timescaledb_data:

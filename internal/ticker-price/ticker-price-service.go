@@ -12,6 +12,7 @@ import (
 	"net/http"
 	"os"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 )
@@ -20,14 +21,20 @@ type Service struct {
 	watchlistService      watchlist.Service
 	vantageConfig         config.VantageConfig
 	tickerPriceRepository *Repository
+	selectedApiKeyIndex   *int
 }
 
 func NewService(watchlistService *watchlist.Service, vantageConfig *config.VantageConfig, tickerPriceRepository *Repository) *Service {
-	return &Service{watchlistService: *watchlistService, vantageConfig: *vantageConfig, tickerPriceRepository: tickerPriceRepository}
+	return &Service{watchlistService: *watchlistService, vantageConfig: *vantageConfig, tickerPriceRepository: tickerPriceRepository, selectedApiKeyIndex: new(int)}
 }
 
 func (s *Service) FindBySymbol(symbol string) *models.TickerPrice {
-	vantageApiUrl := s.vantageConfig.GetGlobalQuoteUrl(symbol)
+	apiKey := s.vantageConfig.ApiKey
+	if s.selectedApiKeyIndex != nil && *s.selectedApiKeyIndex > 0 {
+		apiKey = s.vantageConfig.ApiKeyBackups[*s.selectedApiKeyIndex-1]
+	}
+
+	vantageApiUrl := s.vantageConfig.GetGlobalQuoteUrl(symbol, apiKey)
 	tickerPrice, _ := fetchPrice(vantageApiUrl, symbol)
 	return tickerPrice
 }
@@ -112,12 +119,26 @@ func fetchPrice(externalApiUrl string, symbol string) (*models.TickerPrice, erro
 func pollPrices(tickerService *Service, symbols []string, results chan<- models.TickerPrice) {
 	for _, symbol := range symbols {
 		go func(s string) {
-			vantageApiUrl := tickerService.vantageConfig.GetGlobalQuoteUrl(symbol)
+			apiKey := tickerService.vantageConfig.ApiKey
+			if tickerService.selectedApiKeyIndex != nil && *tickerService.selectedApiKeyIndex > 0 {
+				apiKey = tickerService.vantageConfig.ApiKeyBackups[*tickerService.selectedApiKeyIndex-1]
+			}
+
+			vantageApiUrl := tickerService.vantageConfig.GetGlobalQuoteUrl(symbol, apiKey)
 			resp, err := fetchPrice(vantageApiUrl, s)
 			log.Printf("Raw response : " + fmt.Sprintf("%+v", resp))
+
 			if err != nil {
 				log.Printf("❌ Error fetching %s: %v", s, err)
-				return
+
+				// if err contains substring of "API rate limit" switch to the next API key
+				if strings.Contains(err.Error(), "rate limit") {
+					*tickerService.selectedApiKeyIndex++
+					if *tickerService.selectedApiKeyIndex > len(tickerService.vantageConfig.ApiKeyBackups) {
+						*tickerService.selectedApiKeyIndex = 0
+					}
+					return
+				}
 			}
 			results <- *resp
 		}(symbol)

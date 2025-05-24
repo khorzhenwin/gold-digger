@@ -7,13 +7,18 @@ import (
 )
 
 type VantageConfig struct {
-	ApiKey  string
-	BaseUrl string
+	ApiKey        string
+	ApiKeyBackups []string
+	BaseUrl       string
 }
 
 func LoadVantageConfig() (*VantageConfig, error) {
 	cfg := &VantageConfig{
-		ApiKey:  strings.TrimSpace(os.Getenv("ALPHA_VANTAGE_API_KEY")),
+		ApiKey: strings.TrimSpace(os.Getenv("ALPHA_VANTAGE_API_KEY")),
+		ApiKeyBackups: []string{
+			os.Getenv("ALPHA_VANTAGE_API_KEY_1"),
+			os.Getenv("ALPHA_VANTAGE_API_KEY_2"),
+		},
 		BaseUrl: strings.TrimSpace(os.Getenv("ALPHA_VANTAGE_BASE_URL")),
 	}
 
@@ -24,9 +29,9 @@ func LoadVantageConfig() (*VantageConfig, error) {
 	return cfg, nil
 }
 
-func (c *VantageConfig) GetGlobalQuoteUrl(symbol string) string {
+func (c *VantageConfig) GetGlobalQuoteUrl(symbol string, apiKey string) string {
 	return fmt.Sprintf(
 		"%s/query?function=GLOBAL_QUOTE&symbol=%s&apikey=%s",
-		c.BaseUrl, symbol, c.ApiKey,
+		c.BaseUrl, symbol, apiKey,
 	)
 }
