@@ -17,7 +17,7 @@ tsdb:
 
 # Stop the app container
 down:
-	docker-compose down --remove-orphans
+	docker-compose down -v --remove-orphans
 
 # Reset and rebuild (use only if needed)
 reset:

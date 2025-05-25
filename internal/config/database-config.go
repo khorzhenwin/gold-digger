@@ -15,7 +15,7 @@ type DBConfig struct {
 	DSN      string
 }
 
-func LoadDBConfig() (*DBConfig, error) {
+func LoadAWSConfig() (*DBConfig, error) {
 	cfg := &DBConfig{
 		Host:     os.Getenv("DB_HOST"),
 		Port:     os.Getenv("DB_PORT"),
@@ -30,6 +30,26 @@ func LoadDBConfig() (*DBConfig, error) {
 	// Validate required fields
 	if cfg.Host == "" || cfg.User == "" || cfg.Password == "" || cfg.Name == "" {
 		return nil, fmt.Errorf("incomplete DB config")
+	}
+
+	return cfg, nil
+}
+
+func LoadLocalDBConfig() (*DBConfig, error) {
+	cfg := &DBConfig{
+		Host:     os.Getenv("LOCAL_DB_HOST"),
+		Port:     os.Getenv("LOCAL_DB_PORT"),
+		User:     os.Getenv("LOCAL_DB_USER"),
+		Password: os.Getenv("LOCAL_DB_PASSWORD"),
+		Name:     os.Getenv("LOCAL_DB_NAME"),
+		SSLMode:  os.Getenv("LOCAL_DB_SSL"),
+	}
+
+	cfg.DSN = fmt.Sprintf("host=%s user=%s password=%s dbname=%s port=%s sslmode=%s",
+		cfg.Host, cfg.User, cfg.Password, cfg.Name, cfg.Port, cfg.SSLMode)
+
+	if cfg.Host == "" || cfg.User == "" || cfg.Password == "" || cfg.Name == "" {
+		return nil, fmt.Errorf("incomplete LOCAL DB config")
 	}
 
 	return cfg, nil

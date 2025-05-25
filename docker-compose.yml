@@ -17,11 +17,14 @@ services:
     ports:
       - "5432:5432"
     environment:
-      - POSTGRES_PASSWORD=${LOCAL_DB_PASSWORD} # Use the new variable
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=${LOCAL_DB_PASSWORD}
+      - POSTGRES_DB=${LOCAL_DB_NAME}
     volumes:
       - timescaledb_data:/var/lib/postgresql/data
 
   app:
+    restart: on-failure
     working_dir: /app
     build:
       context: .

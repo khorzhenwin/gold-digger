@@ -13,15 +13,22 @@ import (
 	"github.com/khorzhenwin/gold-digger/internal/watchlist"
 	_ "github.com/swaggo/files"
 	"github.com/swaggo/http-swagger"
+	"gorm.io/gorm"
 	"log"
 	"net/http"
+	"time"
 )
 
 func (app *application) run() error {
 	// 1. Load Configs
 	_ = godotenv.Load() // Loads from .env file
 
-	dbCfg, dbErr := applicationConfig.LoadDBConfig()
+	cloudDbCfg, dbErr := applicationConfig.LoadAWSConfig()
+	if dbErr != nil {
+		log.Fatal(dbErr)
+	}
+
+	localDbCfg, dbErr := applicationConfig.LoadLocalDBConfig()
 	if dbErr != nil {
 		log.Fatal(dbErr)
 	}
@@ -36,26 +43,40 @@ func (app *application) run() error {
 		log.Fatal(nErr)
 	}
 
-	// 2. Initialize DB & Kafka
-	conn, err := db.New(dbCfg)
+	// 2. Initialize DB
+	cloudConn, err := db.NewAWSClient(cloudDbCfg)
 	if err != nil {
 		log.Fatal(err)
 	}
 
+	maxAttempts := 10
+	var localConn *gorm.DB
+	for attempts := 1; attempts <= maxAttempts; attempts++ {
+		localConn, err = db.NewLocalDbClient(localDbCfg)
+		log.Printf("⏳ Waiting for TimescaleDB... attempt %d/%d", attempts, maxAttempts)
+		time.Sleep(5 * time.Second)
+	}
+
+	if localConn == nil {
+		log.Fatalf("❌ Failed to connect to TimescaleDB after %d attempts: %v", maxAttempts, err)
+	} else {
+		log.Println("✅ Connected to TimescaleDB successfully")
+	}
+
 	// 3. Run Migrations & initialize Repository
-	if err := conn.AutoMigrate(&models.Ticker{}); err != nil {
+	if err := cloudConn.AutoMigrate(&models.Ticker{}); err != nil {
 		log.Fatalf("❌ AutoMigrate failed: %v", err)
 	}
-	if err := conn.AutoMigrate(&models.TickerPrice{}); err != nil {
+	if err := localConn.AutoMigrate(&models.TickerPrice{}); err != nil {
 		log.Fatalf("❌ AutoMigrate for TickerPrice failed: %v", err)
 	}
 	// Convert to hypertable
-	conn.Exec("SELECT create_hypertable('ticker_prices', 'timestamp', if_not_exists => TRUE);")
+	localConn.Exec("SELECT create_hypertable('ticker_prices', 'timestamp', if_not_exists => TRUE);")
 
-	watchlistRepo := watchlist.NewRepository(conn)
+	watchlistRepo := watchlist.NewRepository(cloudConn)
 	watchlistService := watchlist.NewService(watchlistRepo)
 	notificationService := notification.NewService(notifierCfg)
-	tickerPriceRepository := ticker_price.NewRepository(conn)
+	tickerPriceRepository := ticker_price.NewRepository(localConn)
 	tickerPriceService := ticker_price.NewService(watchlistService, vantageCfg, tickerPriceRepository)
 
 	// 3.1 Initialize Poller
