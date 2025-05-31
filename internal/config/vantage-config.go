@@ -15,10 +15,14 @@ type VantageConfig struct {
 func LoadVantageConfig() (*VantageConfig, error) {
 	cfg := &VantageConfig{
 		ApiKey: strings.TrimSpace(os.Getenv("ALPHA_VANTAGE_API_KEY")),
-		ApiKeyBackups: []string{
-			os.Getenv("ALPHA_VANTAGE_API_KEY_1"),
-			os.Getenv("ALPHA_VANTAGE_API_KEY_2"),
-		},
+		// get ALPHA_VANTAGE_API_KEY_BACKUP which is a comma-separated list of API keys
+		ApiKeyBackups: func() []string {
+			keys := strings.Split(os.Getenv("ALPHA_VANTAGE_API_KEY_BACKUP"), ",")
+			for i := range keys {
+				keys[i] = strings.TrimSpace(keys[i])
+			}
+			return keys
+		}(),
 		BaseUrl: strings.TrimSpace(os.Getenv("ALPHA_VANTAGE_BASE_URL")),
 	}
 

@@ -53,14 +53,16 @@ func (app *application) run() error {
 	var localConn *gorm.DB
 	for attempts := 1; attempts <= maxAttempts; attempts++ {
 		localConn, err = db.NewLocalDbClient(localDbCfg)
+		if err == nil {
+			log.Println("✅ Connected to TimescaleDB!")
+			break
+		}
 		log.Printf("⏳ Waiting for TimescaleDB... attempt %d/%d", attempts, maxAttempts)
 		time.Sleep(5 * time.Second)
 	}
 
 	if localConn == nil {
 		log.Fatalf("❌ Failed to connect to TimescaleDB after %d attempts: %v", maxAttempts, err)
-	} else {
-		log.Println("✅ Connected to TimescaleDB successfully")
 	}
 
 	// 3. Run Migrations & initialize Repository

@@ -91,8 +91,11 @@ func fetchPrice(externalApiUrl string, symbol string) (*models.TickerPrice, erro
 	// Convert the nested quote safely
 	globalQuote, ok := raw["Global Quote"].(map[string]interface{})
 	if !ok || len(globalQuote) == 0 {
-		log.Printf("⚠️ Missing or invalid Global Quote: %v", raw)
-		return nil, fmt.Errorf("missing or invalid Global Quote")
+		formatErr := fmt.Errorf("⚠️ Missing or invalid Global Quote: %v", raw)
+		if raw["Information"] != nil {
+			formatErr = fmt.Errorf("❌ API error: %s", raw["Information"].(string))
+		}
+		return nil, formatErr
 	}
 
 	price, _ := globalQuote["05. price"].(string)
@@ -179,9 +182,10 @@ func (s *Service) PollAndPersist() {
 			})
 
 			if err != nil {
+				log.Printf("❌ Failed to save price for) %s: %v", res.Symbol, err)
 				return
 			}
-
+			log.Printf("✅ Saved price for %s at %s", res.Symbol, res.Timestamp)
 		case <-ticker.C:
 			if IsTradingHours(time.Now()) || os.Getenv("FORCE_POLL") == "true" {
 				log.Println("🔄 Polling watchlist...")
