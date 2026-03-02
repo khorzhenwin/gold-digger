@@ -12,6 +12,7 @@ type application struct {
 type config struct {
 	BASE_PATH    string
 	ADDRESS      string
+	GRPC_ADDRESS string
 	writeTimeout time.Duration
 	readTimeout  time.Duration
 }
@@ -20,6 +21,7 @@ func main() {
 	cfg := config{
 		BASE_PATH:    "/api/v1",
 		ADDRESS:      ":8080",
+		GRPC_ADDRESS: ":9090",
 		writeTimeout: time.Second * 10,
 		readTimeout:  time.Second * 5,
 	}

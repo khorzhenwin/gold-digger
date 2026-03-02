@@ -129,7 +129,7 @@ func pollPrices(tickerService *Service, symbols []string, results chan<- models.
 
 			vantageApiUrl := tickerService.vantageConfig.GetGlobalQuoteUrl(symbol, apiKey)
 			resp, err := fetchPrice(vantageApiUrl, s)
-			log.Printf("Raw response : " + fmt.Sprintf("%+v", resp))
+			log.Printf("Raw response : %+v", resp)
 
 			if err != nil {
 				log.Printf("❌ Error fetching %s: %v", s, err)

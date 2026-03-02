@@ -3,9 +3,10 @@ package main
 import (
 	"github.com/go-chi/chi/v5"
 	"github.com/joho/godotenv"
-	_ "github.com/khorzhenwin/gold-digger/docs" // <-- this is required for Swagger to embed docs
+	"github.com/khorzhenwin/gold-digger/docs"
 	applicationConfig "github.com/khorzhenwin/gold-digger/internal/config"
 	"github.com/khorzhenwin/gold-digger/internal/db"
+	"github.com/khorzhenwin/gold-digger/internal/grpcapi"
 	"github.com/khorzhenwin/gold-digger/internal/health"
 	"github.com/khorzhenwin/gold-digger/internal/models"
 	"github.com/khorzhenwin/gold-digger/internal/notification"
@@ -14,8 +15,11 @@ import (
 	_ "github.com/swaggo/files"
 	"github.com/swaggo/http-swagger"
 	"gorm.io/gorm"
+	"io"
 	"log"
+	"net"
 	"net/http"
+	"os"
 	"time"
 )
 
@@ -80,6 +84,7 @@ func (app *application) run() error {
 	notificationService := notification.NewService(notifierCfg)
 	tickerPriceRepository := ticker_price.NewRepository(localConn)
 	tickerPriceService := ticker_price.NewService(watchlistService, vantageCfg, tickerPriceRepository)
+	grpcServer := grpcapi.NewServer(watchlistService, tickerPriceService)
 
 	// 3.1 Initialize Poller
 	go tickerPriceService.PollAndPersist()
@@ -90,6 +95,18 @@ func (app *application) run() error {
 
 	// 4. Setup Router config
 	r := chi.NewRouter()
+
+	grpcListener, err := net.Listen("tcp", app.config.GRPC_ADDRESS)
+	if err != nil {
+		log.Fatalf("failed to listen for gRPC on %s: %v", app.config.GRPC_ADDRESS, err)
+	}
+	go func() {
+		log.Println("Starting gRPC server on", app.config.GRPC_ADDRESS)
+		if serveErr := grpcServer.Serve(grpcListener); serveErr != nil {
+			log.Fatalf("gRPC server failed: %v", serveErr)
+		}
+	}()
+
 	server := &http.Server{
 		Addr:         app.config.ADDRESS,
 		Handler:      r,
@@ -104,8 +121,25 @@ func (app *application) run() error {
 		ticker_price.RegisterRoutes(r, tickerPriceService)
 	})
 
-	// 6. Serve Swagger (if generated)
-	r.Get("/swagger/*", httpSwagger.WrapHandler)
+	// 6. Serve REST + gRPC OpenAPI docs in separate channels.
+	r.Get("/openapi/rest/swagger.json", func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = io.WriteString(w, docs.SwaggerInfo.ReadDoc())
+	})
+	r.Get("/openapi/grpc/swagger.json", func(w http.ResponseWriter, req *http.Request) {
+		const grpcOpenAPIPath = "docs/openapi/grpc/proto/golddigger/v1/api.swagger.json"
+		if _, statErr := os.Stat(grpcOpenAPIPath); statErr != nil {
+			http.Error(w, "gRPC OpenAPI spec not found. Run `make proto`.", http.StatusNotFound)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		http.ServeFile(w, req, grpcOpenAPIPath)
+	})
+	r.Get("/swagger/rest/*", httpSwagger.Handler(httpSwagger.URL("/openapi/rest/swagger.json")))
+	r.Get("/swagger/grpc/*", httpSwagger.Handler(httpSwagger.URL("/openapi/grpc/swagger.json")))
+	r.Get("/swagger/*", func(w http.ResponseWriter, req *http.Request) {
+		http.Redirect(w, req, "/swagger/rest/index.html", http.StatusTemporaryRedirect)
+	})
 
 	log.Println("Starting server on", app.config.ADDRESS)
 	return server.ListenAndServe()
