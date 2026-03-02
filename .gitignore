@@ -23,3 +23,7 @@ coverage.out
 
 # Environment files
 .env*
+
+# Local Go caches used by `make proto`
+.gopath/
+.gocache/
